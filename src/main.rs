@@ -1,4 +1,4 @@
-use std::env;
+use std::{env};
 use std::fs::File;
 use std::io::prelude::*;
 
@@ -22,12 +22,20 @@ fn read_file(file_name: &str) -> String{
 // retornar result depois, com erros melhorados
 fn run(query: &str, file_name: &str){
     let cont = read_file(&file_name);
-    println!("{query}, {file_name} conteudo:\n {cont}");
-
+    let x = search(query, &cont);
+    for (idx, linha) in x{
+        println!("{file_name}:{idx}: {linha}");
+    }
 }
 
-fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
-    vec![]
+fn search<'a>(query: &str, contents: &'a str) -> Vec<(usize, String)> {
+    let mut res: Vec<(usize, String)> = Vec::new();
+    for (idx, linha) in contents.lines().enumerate(){
+        if linha.contains(query){
+            res.push((idx + 1, String::from(linha)));
+        }
+    }
+    res
 }
 
 fn main() {
