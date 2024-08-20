@@ -22,29 +22,36 @@ fn read_file(file_name: &str) -> String{
 // retornar result depois, com erros melhorados
 fn run(query: &str, file_name: &str, case: &bool){
     let cont = read_file(&file_name);
-    let x = search(query, &cont, case);
-    for (idx, linha) in x{
+    for (idx, linha) in search(query, &cont, case){
         println!("{file_name}:{idx}: {linha}");
     }
 }
 
 fn search<'a>(query: &str, contents: &'a str, case: &bool) -> Vec<(usize, String)> {
     let mut res: Vec<(usize, String)> = Vec::new();
+    let hquery = highlight(&query);
     if *case {
+        // resolver esse case de forma melhor
         let query = query.to_lowercase();
         for (idx, linha) in contents.lines().enumerate(){
             if linha.to_lowercase().contains(&query){
-                res.push((idx + 1, String::from(linha)));
+                // resolver o replace do case, tentar dar replace por cada indice
+                res.push((idx + 1, linha.replace(&query, &hquery)));
             }
         }
     } else {
         for (idx, linha) in contents.lines().enumerate(){
             if linha.contains(query){
-                res.push((idx + 1, String::from(linha)));
+                res.push((idx + 1, linha.replace(query, &hquery)));
             }
         }
     }
     res
+}
+
+fn highlight(s: &str) -> String{
+    let a = format!("{}{}{}", "\x1b[7m", s, "\x1b[0m"); // inverte cores
+    a
 }
 
 fn main() {
@@ -61,3 +68,5 @@ fn main() {
     let (query, file_name) = read_args();
     run(&query, &file_name, &case);
 }
+
+
