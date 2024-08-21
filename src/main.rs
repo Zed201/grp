@@ -22,6 +22,7 @@ fn read_file(file_name: &str) -> String{
 // retornar result depois, com erros melhorados
 fn run(query: &str, file_name: &str, case: &bool){
     let cont = read_file(&file_name);
+    println!("Procurando por {query} em {file_name}:");
     for (idx, linha) in search(query, &cont, case){
         println!("{file_name}:{idx}: {linha}");
     }
@@ -37,6 +38,7 @@ fn search<'a>(query: &str, contents: &'a str, case: &bool) -> Vec<(usize, String
             if linha.to_lowercase().contains(&query){
                 // resolver o replace do case, tentar dar replace por cada indice
                 res.push((idx + 1, linha.replace(&query, &hquery)));
+
             }
         }
     } else {
@@ -55,18 +57,15 @@ fn highlight(s: &str) -> String{
 }
 
 fn main() {
-    // melhorar isso daqui, muito aninhamento
-    let case = match env::var("CASE_I") {
-       Ok(dado) => 
-        match dado.parse().unwrap() {
-            0 => false,
-            1 => true,
-            _ => panic!("Invalid value")
-       },
-       Err(_) => false
-    };
+    // basicamente pega o valor e case ele não seja passado retorna zero
+    let case_brute: u8 = env::var("CASE_I").unwrap_or_else(|_| String::from("0")).parse().unwrap(); 
+    let mut case_i: bool = false; // case vai determinar se busca vai ser case_insensitive(true) ou não(false)
+    if case_brute == 1 {
+        case_i = true;
+    }
+    
     let (query, file_name) = read_args();
-    run(&query, &file_name, &case);
+    run(&query, &file_name, &case_i);
 }
 
 
