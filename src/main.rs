@@ -1,37 +1,21 @@
+use std::fmt::format;
 use std::thread::{self, JoinHandle};
 use std::sync::{Arc, Mutex};
 use std::{env, io};
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write};
 
-// exemplo od chat para dar destaque
-// use regex::Regex;
+use colored::{Color, Colorize};
+use colored::Color::*;
+use regex::RegexBuilder;
 
-// fn highlight_matches(input: &str, pattern: &str) -> String {
-//     let re = Regex::new(pattern).unwrap();
-//     let mut highlighted = String::new();
-//     let mut last_end = 0;
+const file_color: Color = Green;
 
-//     for mat in re.find_iter(input) {
-//         // Adiciona a parte da string que não corresponde ao padrão
-//         highlighted.push_str(&input[last_end..mat.start()]);
-        
-//         // Adiciona a parte correspondente ao padrão com destaque
-//         highlighted.push_str(&format!("[[{}]]", &mat.as_str()));
-        
-//         // Atualiza o índice do último final
-//         last_end = mat.end();
-//     }
-
-//     // Adiciona a parte restante da string
-//     highlighted.push_str(&input[last_end..]);
-
-//     highlighted
-// }
 
 fn main() {
     let case_insensitive: bool = if env::var("CASE_I").unwrap_or_else(|_| String::from("0")).parse::<u8>().unwrap() == 1 {true} else {false}; 
     // !True: Case insensitive, false: Case Sensitive
+    // fazer variavel de ambiente para colocar cor
     // TODO: Pegar por flag do cli também
 
     let (query, files_name) = read_args().unwrap();
@@ -51,13 +35,18 @@ fn run(query: String, files_name: &Vec<String>, case: bool) -> Result<(), String
         
         // TODO:tratar erros pro threads e se não ele aborda tudo
         let t = thread::spawn(move || {
-            let cont = read_file(&file_name).unwrap_or_else();
-            let p = search(&query, &cont, &case).unwrap();
-
-            let _unused = mutex_clone.lock().unwrap();
-            println!("{}:", highlight(&file_name));
-            for (linha, cont_linha) in p{
-                println!("{linha}:{cont_linha}");
+            match read_file(&file_name) {
+                Ok(conteudo) => {
+                    let p = search(&query, &conteudo, &case).unwrap();
+                    let _unused = mutex_clone.lock().unwrap();
+                    println!("{}:", highlight(&file_name, file_color));
+                    for (linha, cont_linha) in p{
+                        println!("{linha}:{cont_linha}");
+                    }
+                },
+                Err(msg_erro) => {
+                    println!("{}", highlight(&msg_erro, Red))
+                }
             }
            
         });
@@ -75,7 +64,7 @@ fn run(query: String, files_name: &Vec<String>, case: bool) -> Result<(), String
 fn read_args() -> Result<(String, Vec<String>), String>{
     let args:Vec<String> = env::args().collect();
     if args.len() < 3{
-        return Err(String::from("Erro ao pegar mais argumentos")); // provavelmente tem jeitos melhores de fazer isso
+        return Err(String::from("Quantidade de argumentos inválida")); // provavelmente tem jeitos melhores de fazer isso
     }
     let mut v: Vec<String> = Vec::new();
     for i in 2..args.len(){
@@ -85,38 +74,44 @@ fn read_args() -> Result<(String, Vec<String>), String>{
     // primeiro o pattern(nao regex apenas busca normal)
 }
 
-fn read_file(file_name: &String) -> Result<String, io::Error>{
-    let mut f = File::open(file_name)?;
+fn read_file(file_name: &String) -> Result<String, String>{
     let mut conteudo = String::new();
-    f.read_to_string(&mut conteudo)?;   
+    match File::open(file_name) {
+        Ok(mut file) => {
+            let _ = file.read_to_string(&mut conteudo);
+        },
+        Err(_) => {
+            return Err(format!("Arquio {} não pode ser aberto", file_name));
+        }
+    }
     Ok(conteudo)
 }
 
 // TODO:optmizar melhor
 fn search<'a>(query: &str, contents: &'a str, case: &bool) -> Result<Vec<(usize, String)>, String> {
     let mut res: Vec<(usize, String)> = Vec::new();
-    let hquery = highlight(&query);
-    if *case {
-        // resolver esse case de forma melhor
-        let query = query.to_lowercase();
-        for (idx, linha) in contents.lines().enumerate(){
-            if linha.to_lowercase().contains(&query){
-                // resolver o replace do case, tentar dar replace por cada indice
-                res.push((idx + 1, linha.replace(&query, &hquery)));
+    let pat = RegexBuilder::new(query).case_insensitive(*case).build().unwrap(); // implementação se case
 
-            }
+    for (linha, linha_txt) in contents.lines().enumerate(){
+        let mut tmp_str = String::new();
+        let mut last_end = 0;
+        let mut flag = false;
+        for mat in pat.find_iter(linha_txt){
+            flag = true;
+            tmp_str.push_str(&linha_txt[last_end..mat.start()]);
+            tmp_str.push_str(&highlight(mat.as_str(), Red));
+            last_end = mat.end();
         }
-    } else {
-        for (idx, linha) in contents.lines().enumerate(){
-            if linha.contains(query){
-                res.push((idx + 1, linha.replace(query, &hquery)));
-            }
+        tmp_str.push_str(&linha_txt[last_end..]);
+        if flag {
+            res.push((linha, tmp_str));
         }
     }
+
     Ok(res)
 }
 
-// Reformular com format
-fn highlight(s: &str) -> String{
-    format!("{}{}{}", "\x1b[7m", s, "\x1b[0m") // inverte cores
+// TOOD: add argumento de cor
+fn highlight(s: &str, cor: Color) -> String{
+    format!("{}", s.color(cor)) //TODO: Fazer variavel para controlar
 }
