@@ -1,0 +1,9 @@
+Matching Named Variables
+Named variables are irrefutable patterns that match any value, and we’ve used them many times in the book. 
+However, there is a complication when you use named variables in match expressions. 
+Because match starts a new scope, variables declared as part of a pattern inside the match expression will shadow those with the same name outside 
+the match construct, as is the case with all variables. In Listing 18-11, we declare a variable named x with the value Some(5) and a 
+variable y with the value 10. We then create a match expression on the value x. Look at the patterns in the match arms and println! 
+at the end, and try to figure out what the code will print before running this code or reading further.
+
+Filename: src/main.rs

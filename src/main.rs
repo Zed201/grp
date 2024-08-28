@@ -1,5 +1,8 @@
+use std::str::FromStr;
+use std::thread::{self, JoinHandle};
+use std::sync::{Arc, Mutex};
 use std::{env, io};
-use std::fmt::Error;
+// use std::fmt::{format, Error};
 use std::fs::File;
 use std::io::Read;
 
@@ -28,35 +31,46 @@ use std::io::Read;
 //     highlighted
 // }
 
-// fn main() {
-//     let text = "The quick brown fox jumps over the lazy dog.";
-//     let pattern = r"\b\w{4}\b"; // Padrão para encontrar palavras de 4 letras
-//     let result = highlight_matches(text, pattern);
-//     println!("{}", result);
-// }
-
 fn main() {
-    // pega o valor da variável de ambiente do cli, 
     let case_insensitive: bool = if env::var("CASE_I").unwrap_or_else(|_| String::from("0")).parse::<u8>().unwrap() == 1 {true} else {false}; 
     // True: Case insensitive, false: Case Sensitive
     // TODO: Pegar por flag do cli também
-    
+
     let (query, files_name) = read_args().unwrap();
-    // println!("{query}, {files_name:?}");
-    // println!("{}", read_file("teste.txt").unwrap());
-    // run(&query, &file_name, &case_i);
+    let _ = run(&query, &files_name, &case_insensitive);
 }
 
-fn run(query: &str, file_name: &Vec<String>, case: &bool){
-    // fazer logica para criar mutliplas threads
-    // let cont = read_file(&file_name).unwrap();
-    // println!("Procurando por {query} em {file_name}:");
-    // for (idx, linha) in search(query, &cont, case){
-    //     println!("{file_name}:{idx}: {linha}");
-    // }
+fn run(query: &str, files_name: &Vec<String>, case: &bool) -> Result<(), String>{
+    let m_print: Arc<Mutex<bool>> = Arc::new(Mutex::new(false)); // mutex apenas para printar tudo junto de cada thread
+    let mut handles = Vec::new();
+    for i in files_name{
+        
+        let mutex_clone = Arc::clone(&m_print);
+        // TODO:resolver esses clones 
+        let file_name = i.clone();
+        let case = case.clone();
+        let query = String::from_str(query).unwrap(); // concertar isso para a referência funcionar
+
+        // TODO:tratar erros pro threads e se não ele aborda tudo
+        let t = thread::spawn(move || {
+            let cont = read_file(&file_name).unwrap();
+            let _unused = mutex_clone.lock().unwrap();
+            println!("{}:", highlight(file_name.as_str()));
+            for (linha, cont_linha) in search(query.as_str(), &cont, &case).unwrap(){
+                println!("{linha}:{cont_linha}");
+            }
+        });
+
+        handles.push(t);
+
+    }
+    for i in handles{
+        i.join().unwrap();
+    }
+    Ok(())
+    
 }
 
-// mudar para mais de um file por exemplo
 fn read_args() -> Result<(String, Vec<String>), String>{
     let args:Vec<String> = env::args().collect();
     if args.len() < 3{
@@ -70,15 +84,15 @@ fn read_args() -> Result<(String, Vec<String>), String>{
     // primeiro o pattern(nao regex apenas busca normal)
 }
 
-fn read_file(file_name: &str) -> Result<String, io::Error>{
+fn read_file(file_name: &String) -> Result<String, io::Error>{
     let mut f = File::open(&file_name)?;
     let mut conteudo = String::new();
     f.read_to_string(&mut conteudo)?;   
     Ok(conteudo)
 }
 
-
-fn search<'a>(query: &str, contents: &'a str, case: &bool) -> Vec<(usize, String)> {
+// TODO:optmizar melhor
+fn search<'a>(query: &str, contents: &'a str, case: &bool) -> Result<Vec<(usize, String)>, String> {
     let mut res: Vec<(usize, String)> = Vec::new();
     let hquery = highlight(&query);
     if *case {
@@ -98,10 +112,10 @@ fn search<'a>(query: &str, contents: &'a str, case: &bool) -> Vec<(usize, String
             }
         }
     }
-    res
+    Ok(res)
 }
 
+// Reformular com format
 fn highlight(s: &str) -> String{
-    let a = format!("{}{}{}", "\x1b[7m", s, "\x1b[0m"); // inverte cores
-    a
+    format!("{}{}{}", "\x1b[7m", s, "\x1b[0m") // inverte cores
 }
