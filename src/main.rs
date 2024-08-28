@@ -1,8 +1,6 @@
-use std::str::FromStr;
 use std::thread::{self, JoinHandle};
 use std::sync::{Arc, Mutex};
 use std::{env, io};
-// use std::fmt::{format, Error};
 use std::fs::File;
 use std::io::Read;
 
@@ -33,32 +31,35 @@ use std::io::Read;
 
 fn main() {
     let case_insensitive: bool = if env::var("CASE_I").unwrap_or_else(|_| String::from("0")).parse::<u8>().unwrap() == 1 {true} else {false}; 
-    // True: Case insensitive, false: Case Sensitive
+    // !True: Case insensitive, false: Case Sensitive
     // TODO: Pegar por flag do cli também
 
     let (query, files_name) = read_args().unwrap();
-    let _ = run(&query, &files_name, &case_insensitive);
+    let _ = run(query, &files_name, case_insensitive);
 }
 
-fn run(query: &str, files_name: &Vec<String>, case: &bool) -> Result<(), String>{
+fn run(query: String, files_name: &Vec<String>, case: bool) -> Result<(), String>{
     let m_print: Arc<Mutex<bool>> = Arc::new(Mutex::new(false)); // mutex apenas para printar tudo junto de cada thread
-    let mut handles = Vec::new();
+    let mut handles: Vec<JoinHandle<()>> = Vec::new();
+    
     for i in files_name{
         
-        let mutex_clone = Arc::clone(&m_print);
-        // TODO:resolver esses clones 
-        let file_name = i.clone();
-        let case = case.clone();
-        let query = String::from_str(query).unwrap(); // concertar isso para a referência funcionar
-
+        let mutex_clone: Arc<Mutex<bool>> = Arc::clone(&m_print);
+        
+        let file_name: String = i.clone();
+        let query = String::clone(&query); 
+        
         // TODO:tratar erros pro threads e se não ele aborda tudo
         let t = thread::spawn(move || {
-            let cont = read_file(&file_name).unwrap();
+            let cont = read_file(&file_name).unwrap_or_else();
+            let p = search(&query, &cont, &case).unwrap();
+
             let _unused = mutex_clone.lock().unwrap();
-            println!("{}:", highlight(file_name.as_str()));
-            for (linha, cont_linha) in search(query.as_str(), &cont, &case).unwrap(){
+            println!("{}:", highlight(&file_name));
+            for (linha, cont_linha) in p{
                 println!("{linha}:{cont_linha}");
             }
+           
         });
 
         handles.push(t);
@@ -85,7 +86,7 @@ fn read_args() -> Result<(String, Vec<String>), String>{
 }
 
 fn read_file(file_name: &String) -> Result<String, io::Error>{
-    let mut f = File::open(&file_name)?;
+    let mut f = File::open(file_name)?;
     let mut conteudo = String::new();
     f.read_to_string(&mut conteudo)?;   
     Ok(conteudo)
