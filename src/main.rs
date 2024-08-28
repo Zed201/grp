@@ -1,28 +1,29 @@
-use std::fmt::format;
+use std::fmt::Error;
 use std::thread::{self, JoinHandle};
 use std::sync::{Arc, Mutex};
-use std::{env, io};
+use std::env;
+use std::io::Read;
 use std::fs::File;
-use std::io::{Read, Write};
 
-use colored::{Color, Colorize};
-use colored::Color::*;
+use colored::{Color, Color::*, Colorize, ColoredString};
 use regex::RegexBuilder;
 
-const file_color: Color = Green;
-
+const FILE_COLOR: Color = Green;
+const PAT_COLOR: Color = Magenta;
 
 fn main() {
     let case_insensitive: bool = if env::var("CASE_I").unwrap_or_else(|_| String::from("0")).parse::<u8>().unwrap() == 1 {true} else {false}; 
-    // !True: Case insensitive, false: Case Sensitive
-    // fazer variavel de ambiente para colocar cor
-    // TODO: Pegar por flag do cli também
+    let cor_destaque = env::var("COR").unwrap_or_else(|_| String::new());
+    // ! True: Case insensitive, false: Case Sensitive
 
-    let (query, files_name) = read_args().unwrap();
-    let _ = run(query, &files_name, case_insensitive);
+    let (query, files_name) = read_args().unwrap_or_else(|err_msg| {
+        println!("{}", err_msg.red());
+        std::process::exit(1);
+    });
+    let _ = run(query, &files_name, case_insensitive, string_to_color(cor_destaque)); 
 }
 
-fn run(query: String, files_name: &Vec<String>, case: bool) -> Result<(), String>{
+fn run(query: String, files_name: &Vec<String>, case: bool, cor: Color) -> Result<(), String>{
     let m_print: Arc<Mutex<bool>> = Arc::new(Mutex::new(false)); // mutex apenas para printar tudo junto de cada thread
     let mut handles: Vec<JoinHandle<()>> = Vec::new();
     
@@ -33,19 +34,18 @@ fn run(query: String, files_name: &Vec<String>, case: bool) -> Result<(), String
         let file_name: String = i.clone();
         let query = String::clone(&query); 
         
-        // TODO:tratar erros pro threads e se não ele aborda tudo
         let t = thread::spawn(move || {
             match read_file(&file_name) {
                 Ok(conteudo) => {
-                    let p = search(&query, &conteudo, &case).unwrap();
+                    let p = search(&query, &conteudo, &case, &cor).unwrap();
                     let _unused = mutex_clone.lock().unwrap();
-                    println!("{}:", highlight(&file_name, file_color));
-                    for (linha, cont_linha) in p{
+                    println!("{}:", highlight(&file_name, FILE_COLOR));
+                    for (linha, cont_linha) in p {
                         println!("{linha}:{cont_linha}");
                     }
                 },
                 Err(msg_erro) => {
-                    println!("{}", highlight(&msg_erro, Red))
+                    println!("{}", highlight(&msg_erro, Red));
                 }
             }
            
@@ -71,7 +71,6 @@ fn read_args() -> Result<(String, Vec<String>), String>{
         v.push(args[i].clone());
     }
     Ok::<(String, Vec<String>), String>((args[1].clone(),v))
-    // primeiro o pattern(nao regex apenas busca normal)
 }
 
 fn read_file(file_name: &String) -> Result<String, String>{
@@ -88,8 +87,9 @@ fn read_file(file_name: &String) -> Result<String, String>{
 }
 
 // TODO:optmizar melhor
-fn search<'a>(query: &str, contents: &'a str, case: &bool) -> Result<Vec<(usize, String)>, String> {
-    let mut res: Vec<(usize, String)> = Vec::new();
+fn search<'a>(query: &str, contents: &'a str, case: &bool, cor_destaque: &Color) -> Result<Vec<(ColoredString, String)>, Error> {
+    let mut res: Vec<(colored::ColoredString, String)> = Vec::new();
+    
     let pat = RegexBuilder::new(query).case_insensitive(*case).build().unwrap(); // implementação se case
 
     for (linha, linha_txt) in contents.lines().enumerate(){
@@ -99,19 +99,29 @@ fn search<'a>(query: &str, contents: &'a str, case: &bool) -> Result<Vec<(usize,
         for mat in pat.find_iter(linha_txt){
             flag = true;
             tmp_str.push_str(&linha_txt[last_end..mat.start()]);
-            tmp_str.push_str(&highlight(mat.as_str(), Red));
+            tmp_str.push_str(&highlight(mat.as_str(), *cor_destaque));
             last_end = mat.end();
         }
         tmp_str.push_str(&linha_txt[last_end..]);
         if flag {
-            res.push((linha, tmp_str));
+            res.push((linha.to_string().red(), tmp_str));
         }
     }
 
     Ok(res)
 }
 
-// TOOD: add argumento de cor
 fn highlight(s: &str, cor: Color) -> String{
-    format!("{}", s.color(cor)) //TODO: Fazer variavel para controlar
+    s.color(cor).to_string() 
+}
+
+fn string_to_color(cor: String) -> Color{
+    match cor {
+        _ if cor == "Blue" => Blue,
+        _ if cor == "Red" => Red,
+        _ if cor == "Green" => Green,
+        _ if cor == "Yellow" => Yellow,
+        _ if cor == "Magenta" => Magenta,
+        _ => PAT_COLOR
+    }
 }
